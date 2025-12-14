@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 
-const NOTES_DIR = path.join(process.cwd(), 'notes');
+const NOTES_DIR = '/notes';
 
 export async function POST({ request, params }) {
 	const notePath = params.path;
