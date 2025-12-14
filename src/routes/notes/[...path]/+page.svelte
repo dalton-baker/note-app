@@ -14,6 +14,8 @@
 	let isDeleting = false;
 	let showRenameModal = false;
 	let newNoteName = '';
+	let textareaEl;
+	let isUploading = false;
 	
 	$: htmlContent = data.htmlContent || '';
 	
@@ -156,6 +158,60 @@
 			alert('Error renaming note');
 		}
 	}
+	
+	async function handlePaste(event) {
+		const items = event.clipboardData?.items;
+		if (!items) return;
+		
+		for (const item of items) {
+			if (item.type.startsWith('image/')) {
+				event.preventDefault();
+				
+				const file = item.getAsFile();
+				if (!file) continue;
+				
+				isUploading = true;
+				try {
+					const formData = new FormData();
+					formData.append('image', file);
+					
+					const response = await fetch('/api/upload-image', {
+						method: 'POST',
+						body: formData
+					});
+					
+					if (response.ok) {
+						const result = await response.json();
+						
+						// Insert image markdown at cursor position
+						const textarea = textareaEl;
+						const cursorPos = textarea.selectionStart;
+						const imageMarkdown = `![${result.filename}](${result.path})`;
+						
+						editContent = 
+							editContent.substring(0, cursorPos) + 
+							imageMarkdown + 
+							editContent.substring(cursorPos);
+						
+						// Update cursor position
+						setTimeout(() => {
+							textarea.selectionStart = textarea.selectionEnd = cursorPos + imageMarkdown.length;
+							textarea.focus();
+						}, 0);
+					} else {
+						alert('Failed to upload image');
+					}
+				} catch (error) {
+					console.error('Error uploading image:', error);
+					alert('Error uploading image');
+				} finally {
+					isUploading = false;
+				}
+				
+				break;
+			}
+		}
+	}
 </script>
 
 <svelte:head>
@@ -212,10 +268,16 @@
 			<div class="editor-container">
 				<div class="editor-pane" class:hidden-mobile={showPreview}>
 					<textarea 
-						bind:value={editContent}
-						placeholder="Write your note in markdown..."
-						spellcheck="false"
-					></textarea>
+					bind:this={textareaEl}
+					bind:value={editContent}
+					on:paste={handlePaste}
+					placeholder="Write your note in markdown... (paste images directly)"
+					spellcheck="false"
+					disabled={isUploading}
+				></textarea>
+				{#if isUploading}
+					<div class="upload-indicator">Uploading image...</div>
+				{/if}
 				</div>
 				<div class="preview-pane" class:hidden-mobile={!showPreview}>
 					<article class="note">
@@ -429,6 +491,8 @@
 	.preview-pane {
 		flex: 1;
 		background: var(--bg-primary);
+		position: relative;
+		overflow: auto;
 	}
 
 	@media (max-width: 767px) {
@@ -460,6 +524,23 @@
 		overflow-x: hidden;
 		word-wrap: break-word;
 		white-space: pre-wrap;
+	}
+	
+	.upload-indicator {
+		position: absolute;
+		top: 1rem;
+		right: 1rem;
+		background: var(--accent-blue);
+		color: white;
+		padding: 0.5rem 1rem;
+		border-radius: 6px;
+		font-size: 0.9rem;
+		animation: pulse 1.5s ease-in-out infinite;
+	}
+	
+	@keyframes pulse {
+		0%, 100% { opacity: 1; }
+		50% { opacity: 0.6; }
 	}
 
 	.preview-pane {
